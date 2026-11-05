@@ -1,9 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
-from datetime import datetime, timedelta
-from pydantic import BaseModel, Field
-from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders, restock_catalog, restocking_orders
+import itertools
+from typing import List, Literal, Optional
+from datetime import date, datetime, timedelta
+from pydantic import BaseModel, Field, field_validator
+from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders, restock_catalog, restocking_orders, tasks
 
 app = FastAPI(title="Factory Inventory Management System")
 
@@ -113,15 +114,24 @@ class PurchaseOrder(BaseModel):
     created_date: str
     notes: Optional[str] = None
 
+def _validate_iso_date(value: str) -> str:
+    """Accept YYYY-MM-DD or a full ISO timestamp; reject anything else."""
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError("must be an ISO 8601 date (YYYY-MM-DD)")
+    return value
+
 class CreatePurchaseOrderRequest(BaseModel):
     backlog_item_id: str
-    supplier_name: str
-    quantity: int
-    unit_cost: float
+    supplier_name: str = Field(min_length=1)
+    quantity: int = Field(gt=0)
+    unit_cost: float = Field(ge=0)
     expected_delivery_date: str
     notes: Optional[str] = None
 
-# API endpoints
+    _check_delivery_date = field_validator("expected_delivery_date")(_validate_iso_date)
+
 @app.get("/")
 def root():
     return {"message": "Factory Inventory Management System API", "version": "1.0.0"}
@@ -497,6 +507,119 @@ def create_restock_order(request: CreateRestockOrderRequest):
 def get_restock_orders():
     """Submitted restocking orders, newest first."""
     return list(reversed(restocking_orders))
+
+
+# ---------------------------------------------------------------------------
+# Tasks
+# ---------------------------------------------------------------------------
+
+# The client merges its built-in demo tasks (numeric ids 1, 2, ...) with the tasks returned here
+# and tells them apart by id (App.vue: `currentUser.tasks.some(t => t.id === taskId)`).
+# API task ids are therefore strings ("task-1"), so they can never collide with a numeric demo id.
+# A counter (not len(tasks) + 1) keeps ids unique after deletes.
+_task_ids = itertools.count(1)
+
+
+class Task(BaseModel):
+    id: str
+    title: str
+    priority: Literal["high", "medium", "low"]
+    dueDate: str  # camelCase because the client sends and reads it this way
+    status: Literal["pending", "completed"]
+
+
+class CreateTaskRequest(BaseModel):
+    title: str
+    priority: Literal["high", "medium", "low"] = "medium"
+    dueDate: str
+
+    @field_validator("title")
+    @classmethod
+    def title_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("title must not be blank")
+        return v
+
+    _check_due_date = field_validator("dueDate")(_validate_iso_date)
+
+
+@app.get("/api/tasks", response_model=List[Task])
+def get_tasks():
+    """Tasks created through the API, newest first (the client also prepends new tasks)."""
+    return list(reversed(tasks))
+
+
+@app.post("/api/tasks", response_model=Task, status_code=201)
+def create_task(request: CreateTaskRequest):
+    """Create a task; new tasks always start as pending."""
+    task = {
+        "id": f"task-{next(_task_ids)}",
+        "title": request.title,
+        "priority": request.priority,
+        "dueDate": request.dueDate,
+        "status": "pending",
+    }
+    tasks.append(task)
+    return task
+
+
+@app.patch("/api/tasks/{task_id}", response_model=Task)
+def toggle_task(task_id: str):
+    """Toggle a task between pending and completed."""
+    task = next((t for t in tasks if t["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    task["status"] = "completed" if task["status"] == "pending" else "pending"
+    return task
+
+
+@app.delete("/api/tasks/{task_id}")
+def delete_task(task_id: str):
+    """Delete a task."""
+    task = next((t for t in tasks if t["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    tasks.remove(task)
+    return {"message": f"Task {task_id} deleted"}
+
+
+# ---------------------------------------------------------------------------
+# Purchase orders (raised against a backlog item)
+# ---------------------------------------------------------------------------
+
+_purchase_order_ids = itertools.count(1)
+
+
+@app.post("/api/purchase-orders", response_model=PurchaseOrder, status_code=201)
+def create_purchase_order(request: CreatePurchaseOrderRequest):
+    """Raise a purchase order for a backlog item.
+
+    One purchase order per backlog item: GET /api/backlog derives `has_purchase_order` from this
+    list, so a second order for the same item would be ambiguous.
+    """
+    if not any(item["id"] == request.backlog_item_id for item in backlog_items):
+        raise HTTPException(status_code=404, detail=f"Backlog item {request.backlog_item_id} not found")
+    if any(po["backlog_item_id"] == request.backlog_item_id for po in purchase_orders):
+        raise HTTPException(status_code=409, detail="A purchase order already exists for this backlog item")
+
+    purchase_order = {
+        "id": f"PO-{next(_purchase_order_ids):04d}",
+        **request.model_dump(),
+        "status": "Pending",
+        "created_date": datetime.now().isoformat(timespec="seconds"),
+    }
+    purchase_orders.append(purchase_order)
+    return purchase_order
+
+
+@app.get("/api/purchase-orders/{backlog_item_id}", response_model=PurchaseOrder)
+def get_purchase_order_by_backlog_item(backlog_item_id: str):
+    """Get the purchase order raised for a backlog item."""
+    purchase_order = next((po for po in purchase_orders if po["backlog_item_id"] == backlog_item_id), None)
+    if not purchase_order:
+        raise HTTPException(status_code=404, detail=f"No purchase order for backlog item {backlog_item_id}")
+    return purchase_order
 
 
 if __name__ == "__main__":

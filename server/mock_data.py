@@ -44,3 +44,7 @@ restock_catalog = load_json_file('restock_catalog.json')
 
 # Submitted restocking orders. In-memory only (resets on restart, like all other data here).
 restocking_orders = []
+
+# Tasks created through the API. In-memory only. The built-in demo tasks live in the client
+# (useAuth) and are not stored here, so this list starts empty.
+tasks = []
