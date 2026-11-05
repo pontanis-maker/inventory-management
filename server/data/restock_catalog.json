@@ -1,0 +1,11 @@
+[
+  {"sku": "WDG-001", "unit_cost": 42.50, "quantity_on_hand": 120, "category": "Actuators", "warehouse": "San Francisco"},
+  {"sku": "BRG-102", "unit_cost": 31.00, "quantity_on_hand": 90, "category": "Actuators", "warehouse": "Tokyo"},
+  {"sku": "GSK-203", "unit_cost": 12.75, "quantity_on_hand": 210, "category": "Actuators", "warehouse": "London"},
+  {"sku": "MTR-304", "unit_cost": 185.00, "quantity_on_hand": 40, "category": "Controllers", "warehouse": "Tokyo"},
+  {"sku": "FLT-405", "unit_cost": 8.40, "quantity_on_hand": 300, "category": "Sensors", "warehouse": "London"},
+  {"sku": "VLV-506", "unit_cost": 64.20, "quantity_on_hand": 135, "category": "Actuators", "warehouse": "San Francisco"},
+  {"sku": "PSU-501", "unit_cost": 18.99, "quantity_on_hand": 420, "category": "Power Supplies", "warehouse": "San Francisco"},
+  {"sku": "SNR-420", "unit_cost": 27.60, "quantity_on_hand": 60, "category": "Sensors", "warehouse": "Tokyo"},
+  {"sku": "CTL-330", "unit_cost": 96.00, "quantity_on_hand": 30, "category": "Controllers", "warehouse": "San Francisco"}
+]
