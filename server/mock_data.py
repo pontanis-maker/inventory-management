@@ -37,3 +37,10 @@ purchase_orders = load_json_file('purchase_orders.json')
 
 # All data is now loaded from JSON files in the data/ directory
 # This allows for easier maintenance and updates of the sample data
+
+# Restocking: unit cost / on-hand / category / warehouse for every SKU that appears in the
+# demand forecast. inventory.json only covers one of those SKUs, so this mock catalog fills the gap.
+restock_catalog = load_json_file('restock_catalog.json')
+
+# Submitted restocking orders. In-memory only (resets on restart, like all other data here).
+restocking_orders = []
